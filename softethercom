@@ -1,0 +1,1 @@
+docker run -d -p 500:500/udp -p 4500:4500/udp -p 1701:1701/tcp -p 1194:1194/udp -p 443:443/tcp --name softether-vpn -e PSK=En4EW25eI0 -e USERNAME=admin -e PASSWORD=12121313 -e HPW=VPN siomiz/softethervpn
