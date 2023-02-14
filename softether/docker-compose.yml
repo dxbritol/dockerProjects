@@ -1,0 +1,17 @@
+version: '3'
+services:
+  softether-vpn:
+    image: siomiz/softethervpn
+    container_name: softether-vpn
+    environment:
+      - PSK=12141320
+      - USERNAME=admin
+      - PASSWORD=12121313
+      - HPW=VPN
+    ports:
+      - 500:500/udp
+      - 4500:4500/udp
+      - 1701:1701/tcp
+      - 1194:1194/udp
+      - 443:443/tcp
+    restart: unless-stopped
