@@ -9,8 +9,8 @@ services:
     environment:
       - PUID=1000
       - PGID=1000
-      - TZ=America/Mendoza
-      - SERVERURL=IP_SERVER
+      - TZ=America/Guayaquil
+      #- SERVERURL=IP_SERVER
       - SERVERPORT=51820 #optional
       - PEERS=2 #optional
       - PEERDNS=auto #optional
@@ -21,7 +21,7 @@ services:
       - /usr/src:/usr/src
     ports:
       - 51820:51820/udp
-      - 80:8080/tcp
+      #- 80:8080/tcp
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
     restart: unless-stopped
