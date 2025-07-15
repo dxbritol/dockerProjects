@@ -1,0 +1,192 @@
+const fs = require("fs");
+const moment = require("moment-timezone");
+
+const CONTEXT_PATH = "./components/context.json";
+let contextos = {};
+
+if (fs.existsSync(CONTEXT_PATH)) {
+  contextos = JSON.parse(fs.readFileSync(CONTEXT_PATH));
+}
+
+function guardarContexto() {
+  fs.writeFileSync(CONTEXT_PATH, JSON.stringify(contextos, null, 2));
+}
+
+function estaEnHorario() {
+  const ahora = moment().tz("America/Guayaquil");
+  const minutosTotales = ahora.hour() * 60 + ahora.minute();
+  return (
+    (minutosTotales >= 480 && minutosTotales <= 1020) ||
+    (minutosTotales >= 1140 && minutosTotales <= 1260)
+  );
+}
+
+function inicializarMenu(client) {
+  client.on("message", async (msg) => {
+    const numero = msg.from;
+    const texto = msg.body?.toLowerCase().trim();
+    const nombre = msg._data?.notifyName || "Usuario";
+    const ahora = Date.now();
+    const tiempoLimite = 15 * 60 * 1000;
+
+    // ⏱ Expira contexto tras 15 minutos
+    if (contextos[numero] && ahora - contextos[numero].ultimoMensaje > tiempoLimite) {
+      delete contextos[numero];
+    }
+
+    // 🟨 Reinicio manual por el agente
+    if (msg.fromMe && ["un gusto", "saludos", "de nada"].includes(texto)) {
+      if (contextos[numero]) {
+        delete contextos[numero];
+        guardarContexto();
+        return client.sendMessage(numero, generarMensajeMenu(nombre));
+      }
+    }
+
+    const estado = contextos[numero]?.estado;
+    const contieneSaludo = /(hola|buenas|buenos |buen |menu|reiniciar)/i.test(texto);
+
+    // 🟩 Cliente sin contexto
+    if (!contextos[numero]) {
+      if (contieneSaludo) {
+        contextos[numero] = {
+          estado: "inicio",
+          ultimoMensaje: ahora,
+          avisado: false,
+          vinoDelMenu: true
+        };
+        guardarContexto();
+        return client.sendMessage(numero, generarMensajeMenu(nombre));
+      } else {
+        contextos[numero] = {
+          estado: "esperandoHumano",
+          ultimoMensaje: ahora,
+          avisado: true,
+          vinoDelMenu: false
+        };
+        guardarContexto();
+        return client.sendMessage(numero, "✋ Escribe *menu* si necesitas ayuda.");
+      }
+    }
+
+    // 🚫 Cliente en estado esperandoHumano
+    if (estado === "esperandoHumano") {
+      if (contieneSaludo) {
+        contextos[numero] = {
+          estado: "inicio",
+          ultimoMensaje: ahora,
+          avisado: false,
+          vinoDelMenu: true
+        };
+        guardarContexto();
+        return client.sendMessage(numero, generarMensajeMenu(nombre));
+      }
+
+      // Si nunca pasó por el menú y aún no fue avisado
+      if (!contextos[numero].avisado && !contextos[numero].vinoDelMenu) {
+        contextos[numero].avisado = true;
+        contextos[numero].ultimoMensaje = ahora;
+        guardarContexto();
+        return client.sendMessage(numero, "✋ Escribe *menu* si necesitas ayuda.");
+      }
+
+      return; // Silencio total si ya vino del menú o ya fue avisado
+    }
+
+    // ✅ Actualizar timestamp
+    contextos[numero].ultimoMensaje = ahora;
+    contextos[numero].avisado = false;
+    guardarContexto();
+
+    // 📌 Estado: INICIO
+    if (estado === "inicio") {
+      if (texto === "1" || texto.includes("soporte")) {
+        contextos[numero] = {
+          estado: "esperandoHumano",
+          ultimoMensaje: ahora,
+          avisado: false,
+          vinoDelMenu: true
+        };
+        guardarContexto();
+
+        const mensaje = estaEnHorario()
+          ? "⚙️  Por favor necesitamos que nos ayudes con lo siguiente:\n" +
+		"1. Describe lo más detallado posible el problema, para poder identificarlo.\n" +
+		"2. Adjunta solo una captura, lo más clara posible.\nEsto nos ayudará a mejorar nuestra atención\n\n" +
+		"Un asesor de soporte se comunicará contigo en breve.\n" +
+		"Gracias por tu paciencia.\n\nEscribe *menu* si necesitas ayuda."
+          : "🕒 Nuestro horario de soporte es de 08h00 a 17h00 y de 19h00 a 21h00. Te atenderemos tan pronto estemos disponibles.";
+
+        return client.sendMessage(numero, mensaje);
+      }
+
+      if (texto === "2" || texto.includes("ventas")) {
+        contextos[numero] = {
+          estado: "ventas",
+          ultimoMensaje: ahora,
+          avisado: false,
+          vinoDelMenu: true
+        };
+        guardarContexto();
+
+        return client.sendMessage(numero, "🛒 ¿Qué servicio deseas contratar?");
+      }
+
+      if (texto === "3" || texto.includes("renovar")) {
+        contextos[numero] = {
+          estado: "esperandoHumano",
+          ultimoMensaje: ahora,
+          avisado: false,
+          vinoDelMenu: true
+        };
+        guardarContexto();
+
+        return client.sendMessage(
+          numero,
+          "♻️ Adjunta tu comprobante de pago y procederemos a renovar tu servicio.\n\nEscribe *menu* si necesitas ayuda."
+        );
+      }
+
+      return client.sendMessage(
+        numero,
+        "Por favor selecciona una opción válida:\n1️⃣ Soporte\n2️⃣ Ventas\n3️⃣ Renovar servicio"
+      );
+    }
+
+    // 📌 Estado: VENTAS
+    if (estado === "ventas") {
+      if (texto.length > 3) {
+        const mensaje = estaEnHorario()
+          ? `Gracias por tu interés en: *"${msg.body}"*. Un asesor de ventas se comunicará contigo pronto.\n\nEscribe *hola* si necesitas volver al menú.`
+          : "Nuestro horario de ventas es de 08h00 a 17h00 y de 19h00 a 21h00. Te atenderemos apenas estemos disponibles.\n\nEscribe *hola* si necesitas volver al menú.";
+
+        client.sendMessage(numero, mensaje);
+
+        contextos[numero] = {
+          estado: "esperandoHumano",
+          ultimoMensaje: ahora,
+          avisado: false,
+          vinoDelMenu: true
+        };
+        guardarContexto();
+        return;
+      } else {
+        return client.sendMessage(
+          numero,
+          "Por favor, indícanos qué servicio deseas contratar."
+        );
+      }
+    }
+  });
+}
+
+// 📋 Generador del menú principal
+function generarMensajeMenu(nombre) {
+  return `Hola *${nombre}*, te saluda *AsedinfoBot* 🤓\n¿En qué te podemos ayudar?\n\n` +
+         `1️⃣ Soporte\n` +
+         `2️⃣ Ventas\n` +
+         `3️⃣ Renovar un servicio contratado\n\n` +
+         `Responde con el número de la opción.`;
+}
+
+module.exports = { inicializarMenu };

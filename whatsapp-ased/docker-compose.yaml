@@ -1,0 +1,14 @@
+services:
+  whatsapp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whatsapp-asedinfo
+    environment:
+      - PUPPETEER_SKIP_DOWNLOAD=true
+      - TZ=America/Guayaquil  # Cambia según tu zona horaria si deseas
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./session:/app/session
+    restart: unless-stopped
